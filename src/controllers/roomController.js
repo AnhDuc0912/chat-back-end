@@ -5,6 +5,7 @@ const {
   initRoomChat,
   getRooms,
   addMemberToRoom,
+  singleRoomAvailable,
   dispersionRoomById
 } = require('../services/roomService');
 const User = require('../models/user');
@@ -42,6 +43,22 @@ exports.initRoomChat = async (req, res, next) => {
   }
 }
 
+exports.checkAvailableRoom = async(req, res, next) => {
+  const loggingUserId = req.loggingUserId;
+  const { member } = req.body;
+  console.log([loggingUserId, member]);
+  try {
+    const room = await singleRoomAvailable(loggingUserId, member)
+    return res
+      .status(200)
+      .json({
+        room,
+        statusCode: 200,
+      });
+  } catch (error) {
+    next(error);
+  }
+}
 exports.getLastRooms = async (req, res, next) => {
   const loggingUserId = req.loggingUserId;
   try {

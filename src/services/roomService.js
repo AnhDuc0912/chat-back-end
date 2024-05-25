@@ -6,7 +6,25 @@ const User = require('../models/user');
 const _ = require('lodash');
 const Message = require('../models/message');
 const moment = require('moment');
-const { logger } = require('../logger');
+const {
+  logger
+} = require('../logger');
+
+async function singleRoomAvailable(loggingUserId, destUserId) {
+  const availableRoom = await Room.findOne({
+    '$expr': {
+      '$setEquals': ['$members', [loggingUserId, destUserId]]
+    },
+    members: {
+      $size: 2
+    }
+  });
+  if (!availableRoom) {
+    throw new AppException("Room not found.");
+  }
+  return availableRoom;
+}
+
 
 async function findRoomByUser(roomId, loggingUserId) {
   const room = await Room.findById(roomId);
@@ -76,62 +94,64 @@ async function initRoomChat(title = undefined, memIds, loggingUserId) {
 async function getRooms(loggingUserId, sortObj = {}, matchObj = {}) {
   const rooms = await Room
     .aggregate([{
-      $match: {
-        members: {
-          $elemMatch: {
-            $eq: loggingUserId
-          }
-        },
-        lastMsg: {
-          $ne: null
-        }
-      }
-    },
-    {
-      $sort: {
-        'lastMsg.createdAt': -1,
-        'createdAt': -1,
-        ...sortObj
-      }
-    },
-    {
-      $project: {
-        members: {
-          "$map": {
-            "input": "$members",
-            "as": "member",
-            "in": {
-              "$toObjectId": "$$member"
+        $match: {
+          members: {
+            $elemMatch: {
+              $eq: loggingUserId
             }
           },
-        },
-        singleRoom: 1,
-        userConfigs: 1,
-        lastMsg: 1,
-        createdAt: 1,
-        updatedAt: 1,
-        title: 1
-      }
-    },
-    {
-      $lookup: {
-        from: 'Users',
-        let: { member: "$members" },
-        pipeline: [{
-          $match: {
-            $expr: {
-              "$in": ["$_id", "$$member"]
-            }
+          lastMsg: {
+            $ne: null
           }
-        }],
-        "as": "users"
+        }
+      },
+      {
+        $sort: {
+          'lastMsg.createdAt': -1,
+          'createdAt': -1,
+          ...sortObj
+        }
+      },
+      {
+        $project: {
+          members: {
+            "$map": {
+              "input": "$members",
+              "as": "member",
+              "in": {
+                "$toObjectId": "$$member"
+              }
+            },
+          },
+          singleRoom: 1,
+          userConfigs: 1,
+          lastMsg: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          title: 1
+        }
+      },
+      {
+        $lookup: {
+          from: 'Users',
+          let: {
+            member: "$members"
+          },
+          pipeline: [{
+            $match: {
+              $expr: {
+                "$in": ["$_id", "$$member"]
+              }
+            }
+          }],
+          "as": "users"
+        }
+      },
+      {
+        "$match": {
+          ...matchObj
+        }
       }
-    },
-    {
-      "$match": {
-        ...matchObj
-      }
-    }
     ])
   return rooms;
 }
@@ -233,4 +253,11 @@ const dispersionRoomById = async (loggingUserId, roomId) => {
   return room;
 }
 
-module.exports = { findRoomByUser, initRoomChat, getRooms, addMemberToRoom, dispersionRoomById }
+module.exports = {
+  singleRoomAvailable,
+  findRoomByUser,
+  initRoomChat,
+  getRooms,
+  addMemberToRoom,
+  dispersionRoomById
+}
